@@ -10,6 +10,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { Code2, Columns2, Rows2, X, Search } from 'lucide-react';
 import { useToast } from './ui/use-toast';
 import '@xterm/xterm/css/xterm.css';
+import type { TerminalSettings } from '../types/terminal-settings';
 
 interface ClaudeTerminalProps {
   worktreePath: string;
@@ -27,10 +28,10 @@ interface ClaudeTerminalProps {
 // Cache for terminal states per worktree
 const terminalStateCache = new Map<string, string>();
 
-export function ClaudeTerminal({ 
-  worktreePath, 
-  theme = 'dark', 
-  isVisible = true, 
+export function ClaudeTerminal({
+  worktreePath,
+  theme = 'dark',
+  isVisible = true,
   terminalId,
   onSplitVertical,
   onSplitHorizontal,
@@ -48,6 +49,7 @@ export function ClaudeTerminal({
   const [detectedIDEs, setDetectedIDEs] = useState<Array<{ name: string; command: string }>>([]);
   const [searchVisible, setSearchVisible] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [terminalSettings, setTerminalSettings] = useState<TerminalSettings | null>(null);
   const { toast } = useToast();
 
   // Search functionality
@@ -68,9 +70,33 @@ export function ClaudeTerminal({
     }
   }, [handleSearch]);
 
+  // Load terminal settings and listen for changes
+  useEffect(() => {
+    // Load initial settings
+    window.electronAPI.terminalSettings.get().then(setTerminalSettings);
+
+    // Listen for settings changes
+    const unsubscribe = window.electronAPI.terminalSettings.onChange((newSettings) => {
+      setTerminalSettings(newSettings);
+    });
+
+    return () => {
+      unsubscribe();
+    };
+  }, []);
+
+  // Create terminal with initial settings
   useEffect(() => {
     if (!terminalRef.current) return;
 
+    // If we don't have settings yet, load defaults
+    const settings = terminalSettings || {
+      fontFamily: 'Menlo, Monaco, "Courier New", monospace',
+      fontSize: 14,
+      cursorBlink: true,
+      scrollback: 10000,
+      tabStopWidth: 4
+    };
 
     // Create terminal instance with theme-aware colors
     const getTerminalTheme = (currentTheme: 'light' | 'dark') => {
@@ -127,13 +153,13 @@ export function ClaudeTerminal({
 
     const term = new Terminal({
       theme: getTerminalTheme(theme),
-      fontFamily: 'Menlo, Monaco, "Courier New", monospace',
-      fontSize: 14,
+      fontFamily: settings.fontFamily,
+      fontSize: settings.fontSize,
       lineHeight: 1.2,
-      cursorBlink: true,
+      cursorBlink: settings.cursorBlink,
       allowTransparency: false,
-      scrollback: 10000,
-      tabStopWidth: 4,
+      scrollback: settings.scrollback,
+      tabStopWidth: settings.tabStopWidth,
       // Handle screen clearing properly
       windowsMode: false,
       // Allow proposed API for Unicode11 addon
@@ -248,8 +274,8 @@ export function ClaudeTerminal({
     // Create ResizeObserver to watch for container size changes (e.g., when splitting terminals)
     const resizeObserver = new ResizeObserver(() => {
       // Debounce resize to avoid excessive calls
-      clearTimeout((window as any).resizeDebounceTimer);
-      (window as any).resizeDebounceTimer = setTimeout(() => {
+      clearTimeout((window as unknown as { resizeDebounceTimer?: NodeJS.Timeout }).resizeDebounceTimer);
+      (window as unknown as { resizeDebounceTimer?: NodeJS.Timeout }).resizeDebounceTimer = setTimeout(() => {
         handleResize();
       }, 100);
     });
@@ -434,7 +460,7 @@ export function ClaudeTerminal({
     window.electronAPI.ide.detect().then(setDetectedIDEs);
   }, []);
 
-  // Update theme when prop changes
+  // Update terminal options when settings or theme changes
   useEffect(() => {
     if (!terminal) return;
 
@@ -458,8 +484,18 @@ export function ClaudeTerminal({
       }
     };
 
+    // Update theme
     terminal.options.theme = getTerminalTheme(theme);
-  }, [terminal, theme]);
+
+    // Update font settings if available
+    if (terminalSettings) {
+      terminal.options.fontFamily = terminalSettings.fontFamily;
+      terminal.options.fontSize = terminalSettings.fontSize;
+      terminal.options.cursorBlink = terminalSettings.cursorBlink;
+      terminal.options.scrollback = terminalSettings.scrollback;
+      terminal.options.tabStopWidth = terminalSettings.tabStopWidth;
+    }
+  }, [terminal, theme, terminalSettings]);
 
   // Handle visibility changes - focus terminal when it becomes visible
   useEffect(() => {
