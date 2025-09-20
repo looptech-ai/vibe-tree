@@ -98,6 +98,10 @@ PROJECT_PATH=/path/to/project          # Default project path
 # ALLOW_INSECURE_LAN=1
 # ALLOW_NETWORK_DEV=1
 DEFAULT_PROJECTS=/path1,/path2         # Auto-load projects (first becomes default)
+# Authentication (for webapp login)
+USERNAME=your_username                  # Set username for authentication
+PASSWORD=your_password                  # Set password for authentication
+AUTH_REQUIRED=true                     # Enable authentication
 ```
 
 ## Features
