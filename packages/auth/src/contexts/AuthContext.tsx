@@ -79,7 +79,7 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 // AuthProvider component
 export function AuthProvider({ children, serverUrl }: AuthProviderProps) {
   const [state, dispatch] = useReducer(authReducer, initialState);
-  const authAPI = new AuthAPI(serverUrl);
+  const authAPI = React.useMemo(() => new AuthAPI(serverUrl), [serverUrl]);
 
   // Check authentication status on mount
   const checkAuthStatus = useCallback(async () => {
@@ -136,17 +136,18 @@ export function AuthProvider({ children, serverUrl }: AuthProviderProps) {
 
   // Logout function
   const logout = useCallback(async () => {
+    const currentToken = state.sessionToken;
     try {
-      if (state.sessionToken) {
+      if (currentToken) {
         // Attempt to notify server (don't wait for response)
-        authAPI.logout(state.sessionToken).catch(console.warn);
+        authAPI.logout(currentToken).catch(console.warn);
       }
     } finally {
       // Always clear local state
       AuthStorage.removeSessionToken();
       dispatch({ type: 'LOGOUT' });
     }
-  }, [authAPI, state.sessionToken]);
+  }, [authAPI]); // Remove state.sessionToken from deps to prevent re-renders
 
   // Clear error function
   const clearError = useCallback(() => {
@@ -161,16 +162,16 @@ export function AuthProvider({ children, serverUrl }: AuthProviderProps) {
   // Check auth status on mount
   useEffect(() => {
     checkAuthStatus();
-  }, [checkAuthStatus]);
+  }, []); // Empty deps array - only run on mount
 
-  const contextValue: AuthContextType = {
+  const contextValue: AuthContextType = React.useMemo(() => ({
     ...state,
     login,
     logout,
     checkAuthStatus,
     clearError,
     retry,
-  };
+  }), [state, login, logout, checkAuthStatus, clearError, retry]);
 
   return (
     <AuthContext.Provider value={contextValue}>
