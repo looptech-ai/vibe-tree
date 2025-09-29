@@ -9,6 +9,7 @@ import { Button } from './ui/button';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from './ui/dropdown-menu';
 import { Code2, Columns2, Rows2, X, Search } from 'lucide-react';
 import { useToast } from './ui/use-toast';
+import { escapeShellPath } from '@vibetree/core';
 import '@xterm/xterm/css/xterm.css';
 import type { TerminalSettings } from '../types/terminal-settings';
 
@@ -50,6 +51,7 @@ export function ClaudeTerminal({
   const [searchVisible, setSearchVisible] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [terminalSettings, setTerminalSettings] = useState<TerminalSettings | null>(null);
+  const [isDragOver, setIsDragOver] = useState(false);
   const { toast } = useToast();
 
   // Search functionality
@@ -568,8 +570,80 @@ export function ClaudeTerminal({
     }
   };
 
+  /**
+   * Handle drag enter event
+   */
+  const handleDragEnter = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+  }, []);
 
+  /**
+   * Handle drag over event
+   */
+  const handleDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    e.dataTransfer.dropEffect = 'copy';
+    setIsDragOver(true);
+  }, []);
 
+  /**
+   * Handle drag leave event
+   */
+  const handleDragLeave = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    // Check if we're actually leaving the terminal container
+    const rect = terminalRef.current?.getBoundingClientRect();
+    if (rect && (e.clientX < rect.left || e.clientX > rect.right ||
+                 e.clientY < rect.top || e.clientY > rect.bottom)) {
+      setIsDragOver(false);
+    }
+  }, []);
+
+  /**
+   * Handle drop event
+   */
+  const handleDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragOver(false);
+
+    if (!processIdRef.current) {
+      return;
+    }
+
+    // Get the dropped files
+    const files = e.dataTransfer.files;
+    if (files.length === 0) {
+      return;
+    }
+
+    // Build the escaped paths
+    const paths: string[] = [];
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+
+      // In Electron 32+, we need to use webUtils.getPathForFile() to get the path
+      try {
+        const path = window.electronAPI.utils.getPathForFile(file);
+        if (path) {
+          const escapedPath = escapeShellPath(path);
+          paths.push(escapedPath);
+        }
+      } catch (error) {
+        console.error(`Error getting path for file:`, error);
+      }
+    }
+
+    if (paths.length > 0) {
+      // Insert the paths at current cursor position
+      const pathString = paths.join(' ');
+      window.electronAPI.shell.write(processIdRef.current, pathString);
+    }
+  }, []);
 
   return (
     <div className="claude-terminal-root flex-1 flex flex-col h-full overflow-hidden">
@@ -711,7 +785,19 @@ export function ClaudeTerminal({
       <div
         ref={terminalRef}
         className={`terminal-xterm-container flex-1 h-full ${theme === 'light' ? 'bg-white' : 'bg-black'}`}
-        style={{ minHeight: '100px' }}
+        onDragEnter={handleDragEnter}
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
+        onDrop={handleDrop}
+        style={{
+          minHeight: '100px',
+          position: 'relative',
+          ...(isDragOver ? {
+            outline: '2px dashed #007acc',
+            outlineOffset: '-2px',
+            backgroundColor: 'rgba(0, 122, 204, 0.05)'
+          } : {})
+        }}
       />
     </div>
   );
