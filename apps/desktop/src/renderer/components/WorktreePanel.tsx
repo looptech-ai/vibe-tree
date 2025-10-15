@@ -5,6 +5,7 @@ import { Input } from './ui/input';
 import { ScrollArea } from './ui/scroll-area';
 import { GitBranch, Plus, RefreshCw, Trash2 } from 'lucide-react';
 import { useToast } from './ui/use-toast';
+import { isProtectedBranch } from '../utils/worktree';
 
 interface Worktree {
   path: string;
@@ -190,7 +191,7 @@ export function WorktreePanel({ projectPath, selectedWorktree, onSelectWorktree,
                   </div>
                 </div>
               </button>
-              {worktrees.length > 1 && worktree.branch && !worktree.branch.includes('main') && !worktree.branch.includes('master') && (
+              {worktrees.length > 1 && worktree.branch && !isProtectedBranch(worktree.branch) && (
                 <Button
                   size="icon"
                   variant="ghost"
