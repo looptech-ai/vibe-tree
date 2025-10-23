@@ -17,7 +17,7 @@
     "build:main": "tsc -p tsconfig.main.json",
     "build:preload": "tsc -p tsconfig.preload.json",
     "build:renderer": "vite build",
-    "copy:assets": "cp src/main/stats-dialog.html dist/main/",
+    "copy:assets": "cp src/main/stats-dialog.html dist/main/ && cp src/main/stats-dialog-preload.js dist/main/",
     "start": "electron .",
     "package": "electron-builder",
     "lint": "eslint . --ext .ts,.tsx",

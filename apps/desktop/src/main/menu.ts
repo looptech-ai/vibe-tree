@@ -35,8 +35,9 @@ function showStatsDialog(parentWindow: BrowserWindow, stats: any) {
     show: false,
     resizable: true,
     webPreferences: {
-      nodeIntegration: true,
-      contextIsolation: false
+      preload: path.join(__dirname, 'stats-dialog-preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false
     }
   });
 

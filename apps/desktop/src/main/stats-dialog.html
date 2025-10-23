@@ -161,11 +161,13 @@
   </div>
 
   <script>
-    const { ipcRenderer } = require('electron');
-
     function closeWindow() {
-      // Send close request to main process
-      ipcRenderer.send('stats-dialog:close');
+      console.log('Close button clicked');
+      if (window.statsDialog && window.statsDialog.close) {
+        window.statsDialog.close();
+      } else {
+        console.error('statsDialog API not available');
+      }
     }
 
     function updateStats(stats) {
@@ -209,16 +211,22 @@
       }
     }
 
-    // Receive stats data from main process
-    ipcRenderer.on('stats-data', (event, stats) => {
-      updateStats(stats);
-    });
+    // Listen for stats data from main process
+    if (window.statsDialog && window.statsDialog.onStatsData) {
+      window.statsDialog.onStatsData((stats) => {
+        updateStats(stats);
+      });
+    }
 
-    // Request stats data on load using invoke for reliability
+    // Request stats data on load
     window.addEventListener('DOMContentLoaded', async () => {
       try {
-        const stats = await ipcRenderer.invoke('stats:get-data');
-        updateStats(stats);
+        if (window.statsDialog && window.statsDialog.getStats) {
+          const stats = await window.statsDialog.getStats();
+          updateStats(stats);
+        } else {
+          console.error('statsDialog API not available');
+        }
       } catch (error) {
         console.error('Failed to load stats:', error);
       }
