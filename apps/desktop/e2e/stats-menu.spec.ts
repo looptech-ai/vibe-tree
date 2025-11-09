@@ -1,6 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { ElectronApplication, Page, _electron as electron } from 'playwright';
 import { closeElectronApp } from './helpers/test-launcher';
+import { waitUntil } from './test-utils';
 import path from 'path';
 import fs from 'fs';
 import { execSync } from 'child_process';
@@ -119,7 +120,27 @@ test.describe('Stats Menu', () => {
     await expect(terminalScreen).toBeVisible({ timeout: 10000 });
     await page.waitForTimeout(2000);
 
-    // Get stats - should have 1 active process
+    // Wait for PTY process to be registered
+    await waitUntil(page, {
+      condition: async () => {
+        const stats = await electronApp.evaluate(async ({ ipcMain }) => {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const handlers = (ipcMain as unknown as {_invokeHandlers?: Map<string, (...args: any[]) => any>})._invokeHandlers;
+          if (handlers && handlers.get('shell:get-stats')) {
+            const handler = handlers.get('shell:get-stats');
+            return await handler();
+          }
+          throw new Error('shell:get-stats handler not found');
+        });
+
+        return stats && stats.activeProcessCount === 1 && stats.sessions.length === 1;
+      },
+      timeoutMs: 10000,
+      intervalMs: 500,
+      message: 'PTY process was not registered in stats'
+    });
+
+    // Get stats for final verification
     const stats = await electronApp.evaluate(async ({ ipcMain }) => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const handlers = (ipcMain as unknown as {_invokeHandlers?: Map<string, (...args: any[]) => any>})._invokeHandlers;
