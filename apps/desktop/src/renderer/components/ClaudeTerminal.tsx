@@ -7,11 +7,12 @@ import { Unicode11Addon } from '@xterm/addon-unicode11';
 import { SearchAddon } from '@xterm/addon-search';
 import { Button } from './ui/button';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from './ui/dropdown-menu';
-import { Code2, Columns2, Rows2, X, Search } from 'lucide-react';
+import { Code2, Columns2, Rows2, X, Search, Clock } from 'lucide-react';
 import { useToast } from './ui/use-toast';
 import { escapeShellPath } from '@vibetree/core';
 import '@xterm/xterm/css/xterm.css';
 import type { TerminalSettings } from '../types/terminal-settings';
+import { SchedulerDialog, type SchedulerConfig } from './SchedulerDialog';
 
 interface ClaudeTerminalProps {
   worktreePath: string;
@@ -54,6 +55,13 @@ export function ClaudeTerminal({
   const [isDragOver, setIsDragOver] = useState(false);
   const { toast } = useToast();
 
+  // Scheduler state
+  const [schedulerDialogOpen, setSchedulerDialogOpen] = useState(false);
+  const [schedulerConfig, setSchedulerConfig] = useState<SchedulerConfig | null>(null);
+  const [schedulerRunning, setSchedulerRunning] = useState(false);
+  const schedulerTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const schedulerIntervalRef = useRef<NodeJS.Timeout | null>(null);
+
   // Search functionality
   const handleSearch = useCallback((query: string, direction: 'next' | 'previous' = 'next') => {
     if (!searchAddonRef.current || !query) return;
@@ -71,6 +79,83 @@ export function ClaudeTerminal({
       handleSearch(value);
     }
   }, [handleSearch]);
+
+  // Scheduler functionality
+  const stopScheduler = useCallback(() => {
+    if (schedulerTimeoutRef.current) {
+      clearTimeout(schedulerTimeoutRef.current);
+      schedulerTimeoutRef.current = null;
+    }
+    if (schedulerIntervalRef.current) {
+      clearInterval(schedulerIntervalRef.current);
+      schedulerIntervalRef.current = null;
+    }
+    setSchedulerRunning(false);
+  }, []);
+
+  const sendScheduledCommand = useCallback((command: string) => {
+    if (!processIdRef.current || !terminal) return;
+
+    // Simulate typing through xterm terminal instance
+    // This ensures the input goes through the same path as real user typing,
+    // which is critical for interactive apps like Claude Code that process
+    // input character-by-character in raw terminal mode
+
+    // Type each character with a small delay to simulate realistic typing
+    let charIndex = 0;
+    const typeNextChar = () => {
+      if (charIndex < command.length) {
+        const char = command[charIndex];
+        // Send to PTY
+        window.electronAPI.shell.write(processIdRef.current, char);
+        charIndex++;
+        setTimeout(typeNextChar, 10); // 10ms between characters
+      } else {
+        // After all characters, wait 1 second before sending ENTER key (\r)
+        setTimeout(() => {
+          window.electronAPI.shell.write(processIdRef.current, '\r');
+        }, 1000);
+      }
+    };
+
+    typeNextChar();
+  }, [terminal]);
+
+  const startScheduler = useCallback((config: SchedulerConfig) => {
+    // Stop any existing scheduler
+    stopScheduler();
+
+    setSchedulerConfig(config);
+    setSchedulerRunning(true);
+
+    if (config.repeat) {
+      // For repeat mode, use setInterval
+      schedulerIntervalRef.current = setInterval(() => {
+        sendScheduledCommand(config.command);
+      }, config.delayMs);
+    } else {
+      // For one-time mode, use setTimeout
+      schedulerTimeoutRef.current = setTimeout(() => {
+        sendScheduledCommand(config.command);
+        setSchedulerRunning(false);
+        setSchedulerConfig(null);
+      }, config.delayMs);
+    }
+
+    setSchedulerDialogOpen(false);
+  }, [stopScheduler, sendScheduledCommand]);
+
+  const handleSchedulerStop = useCallback(() => {
+    stopScheduler();
+    setSchedulerConfig(null);
+  }, [stopScheduler]);
+
+  // Cleanup scheduler on unmount
+  useEffect(() => {
+    return () => {
+      stopScheduler();
+    };
+  }, [stopScheduler]);
 
   // Load terminal settings and listen for changes
   useEffect(() => {
@@ -657,6 +742,15 @@ export function ClaudeTerminal({
           <Button
             size="icon"
             variant="ghost"
+            onClick={() => setSchedulerDialogOpen(true)}
+            title="Schedule Command"
+            className={schedulerRunning ? 'text-blue-500' : ''}
+          >
+            <Clock className={`h-4 w-4 ${schedulerRunning ? 'animate-pulse' : ''}`} />
+          </Button>
+          <Button
+            size="icon"
+            variant="ghost"
             onClick={() => setSearchVisible(!searchVisible)}
             title="Search Terminal (Ctrl+F)"
           >
@@ -798,6 +892,16 @@ export function ClaudeTerminal({
             backgroundColor: 'rgba(0, 122, 204, 0.05)'
           } : {})
         }}
+      />
+
+      {/* Scheduler Dialog */}
+      <SchedulerDialog
+        open={schedulerDialogOpen}
+        onClose={() => setSchedulerDialogOpen(false)}
+        onStart={startScheduler}
+        onStop={handleSchedulerStop}
+        isRunning={schedulerRunning}
+        currentConfig={schedulerConfig}
       />
     </div>
   );
