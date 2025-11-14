@@ -161,7 +161,15 @@ class DesktopShellManager {
     ipcMain.handle('shell:get-stats', async () => {
       const sessions = this.sessionManager.getAllSessions();
       const spawnErrors = this.sessionManager.getSpawnErrors();
-      const systemDiagnostics = await getSystemDiagnostics();
+
+      // Get session manager stats for app-specific PTY tracking
+      const sessionManagerStats = {
+        totalPtyInstancesCreated: this.sessionManager.getTotalPtyInstancesCreated(),
+        currentActiveSessions: sessions.length
+      };
+
+      // Get extended diagnostics with app-specific metrics
+      const extendedDiagnostics = await getExtendedDiagnostics(sessionManagerStats);
 
       return {
         activeProcessCount: sessions.length,
@@ -177,7 +185,9 @@ class DesktopShellManager {
           error: e.error,
           errorCode: e.errorCode
         })),
-        systemDiagnostics
+        systemDiagnostics: extendedDiagnostics,
+        // For backward compatibility
+        extendedDiagnostics
       };
     });
 
@@ -242,6 +252,7 @@ class DesktopShellManager {
               : null,
             appPtyInfo: diagnostics.appPtyInfo,
             ptyProcessCount: diagnostics.ptyProcesses.count,
+            ptyDeviceInfo: diagnostics.ptyDeviceInfo,
             childProcessCount: diagnostics.childProcesses.length,
             zombieCount: diagnostics.zombieProcessCount,
             warningCount: diagnostics.warnings.length,
