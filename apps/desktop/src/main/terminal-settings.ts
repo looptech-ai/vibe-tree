@@ -24,9 +24,23 @@ const DEFAULT_SETTINGS: TerminalSettings = {
 
 class TerminalSettingsManager {
   private settings: TerminalSettings = { ...DEFAULT_SETTINGS };
-  private readonly storageFile: string;
+  private storageFile!: string;
+  private _initialized = false;
 
   constructor() {
+    // Defer initialization until app is ready
+  }
+
+  /**
+   * Initialize the settings manager (must be called when app is ready)
+   * Loads settings from disk
+   */
+  public initialize() {
+    if (this._initialized) {
+      return; // Already initialized
+    }
+    this._initialized = true;
+
     this.storageFile = path.join(app.getPath('userData'), 'terminal-settings.json');
     this.loadSettings();
   }
